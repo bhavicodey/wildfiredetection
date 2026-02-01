@@ -59,14 +59,19 @@ fetch_data = st.sidebar.button("🔍 Fetch Fire Data", type="primary")
 def get_firms_data(api_key, source, area, date_range):
     """
     Fetch fire data from NASA FIRMS API
+    API Format: /api/area/csv/{MAP_KEY}/{source}/{area}/{dayrange}/{date}
+    Returns data for [DATE] to [DATE + DAY_RANGE - 1]
     """
-    # Format dates
-    start = date_range[0].strftime("%Y-%m-%d")
-    end = date_range[1].strftime("%Y-%m-%d")
+    # Format start date - FIRMS expects YYYY-MM-DD format
+    start_date = date_range[0].strftime("%Y-%m-%d")
+    day_range = date_range[2]
     
     # Build URL for area request
     base_url = "https://firms.modaps.eosdis.nasa.gov/api/area/csv"
-    url = f"{base_url}/{api_key}/{source}/{area}/{date_range[2]}/{start},{end}"
+    
+    # The DATE parameter is just the start date
+    # The API returns data from start_date to start_date + day_range - 1
+    url = f"{base_url}/{api_key}/{source}/{area}/{day_range}/{start_date}"
     
     try:
         response = requests.get(url, timeout=30)
