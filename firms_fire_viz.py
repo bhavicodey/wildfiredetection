@@ -38,10 +38,7 @@ if "df" not in st.session_state:
 # =========================
 st.sidebar.header("🔑 API Keys")
 
-firms_api_key = st.sidebar.text_input(
-    "NASA FIRMS API Key",
-    type="password"
-)
+firms_api_key = "7a8749d24a541283600ded9b708c220c"
 
 cerebras_api_key = "csk-y2vf6htw5pp3vhwy63x5j2684yn6r2vwykffke4534tdpfyk"
 
