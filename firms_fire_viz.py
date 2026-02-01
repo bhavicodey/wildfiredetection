@@ -8,7 +8,7 @@ import time
 
 st.set_page_config(page_title="FIRMS Fire Visualization", layout="wide")
 
-st.title("🔥 NASA FIRMS Fire Data Visualization")
+st.title("🔥 NASA FIRMS Fire Data Visualization (Update)")
 st.markdown("Visualize active fire data from NASA's Fire Information for Resource Management System")
 
 # Sidebar for inputs
