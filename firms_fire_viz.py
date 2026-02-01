@@ -19,12 +19,12 @@ except:
 # Page Config
 # =========================
 st.set_page_config(
-    page_title="🔥 Wildfire Detection + Cerebras AI",
+    page_title="🌍 Planetary Operations Core",
     layout="wide"
 )
 
-st.title("🔥 Wildfire Detection & Risk Analysis")
-st.caption("NASA FIRMS × Cerebras Wafer-Scale Inference")
+st.title("🌍 Planetary Operations Core")
+st.caption("Satellite Anomaly Detection × Cerebras Wafer-Scale Inference")
 
 # =========================
 # How to Run Box
@@ -33,15 +33,16 @@ st.info(
     """
 ### ▶️ How to Run This Demo
 
-This demo combines **live satellite wildfire detections** with **ultra-low-latency Cerebras inference**.
-All API keys are **preconfigured** — no setup required.
+This demo combines **live satellite anomaly detections** with **ultra-low-latency Cerebras reasoning**.
+
+**All API keys are preconfigured — no setup required.**
 
 **Steps:**
-1. Adjust the **date range** and **bounding box** in the sidebar (or keep defaults)
+1. Adjust the **date range** and **bounding box** (or keep defaults)
 2. Click **🔍 Fetch Fire Data** to load satellite detections
-3. Select a fire and click **⚡ Analyze Fire Risk** to run instant Cerebras analysis
+3. Select an anomaly and click **⚡ Generate Tactical Action Plan**
 
-⚡ Cerebras enables real-time, multi-step reasoning on fresh satellite data — eliminating traditional processing delays.
+⚡ Cerebras enables **real-time multi-layer reasoning** on raw satellite data — eliminating traditional processing delays.
 """
 )
 
@@ -101,7 +102,7 @@ def fetch_firms(api_key, source, area, start_date, days):
 # Fetch Button
 # =========================
 if st.sidebar.button("🔍 Fetch Fire Data"):
-    with st.spinner("Fetching wildfire data…"):
+    with st.spinner("Fetching satellite detections…"):
         area = f"{min_lon},{min_lat},{max_lon},{max_lat}"
         days = (end_date - start_date).days + 1
 
@@ -115,7 +116,7 @@ if st.sidebar.button("🔍 Fetch Fire Data"):
 
         st.session_state.df = df
 
-    st.success(f"Loaded {len(df)} fire detections")
+    st.success(f"Loaded {len(df)} satellite detections")
 
 # =========================
 # Display Data
@@ -123,7 +124,7 @@ if st.sidebar.button("🔍 Fetch Fire Data"):
 df = st.session_state.df
 
 if df is not None and not df.empty:
-    st.subheader("🗺️ Fire Map")
+    st.subheader("🗺️ Satellite Detection Map")
 
     m = folium.Map(
         location=[df.latitude.mean(), df.longitude.mean()],
@@ -141,71 +142,94 @@ if df is not None and not df.empty:
 
     folium_static(m, width=1200, height=500)
 
-    st.subheader("📊 Fire Table")
+    st.subheader("📊 Detection Table")
     st.dataframe(df.head(100), use_container_width=True)
 
 # =========================
 # Cerebras Analysis
 # =========================
-st.subheader("🧠 Cerebras Fire Risk Analysis")
+st.subheader("🧠 Cerebras Tactical Reasoning Engine")
 
 if not CEREBRAS_AVAILABLE:
     st.warning("Cerebras SDK not installed")
 elif df is None or df.empty:
-    st.info("Fetch fire data first.")
+    st.info("Fetch satellite data first.")
 else:
     client = Cerebras(api_key=cerebras_api_key)
 
     fire_idx = st.selectbox(
-        "Select a fire to analyze",
+        "Select a satellite anomaly",
         df.index[:50]
     )
 
-    def fire_context(row):
+    def anomaly_context(row):
         return f"""
-Wildfire detected:
+Satellite observation detected:
 Latitude: {row.latitude}
 Longitude: {row.longitude}
 Date: {row.acq_date}
 Time: {row.acq_time}
-Brightness: {row.bright_ti4}
-Fire Radiative Power: {row.frp}
-
-Analyze:
-- Likelihood of spread
-- Risk to population
-- Environmental factors
-- Urgency level
-- Recommended actions
+Thermal Brightness: {row.bright_ti4}
+Radiative Power: {row.frp}
 """
 
-    if st.button("⚡ Analyze Fire Risk"):
-        with st.spinner("⚡ Running ultra-fast Cerebras inference…"):
+    SYSTEM_PROMPT = """
+ROLE & OBJECTIVE
+You are the Planetary Operations Core, a high-frequency strategic AI designed to protect critical infrastructure and human life.
+
+Latency is mission-critical. You must complete all reasoning and output in under one second of human-perceived time.
+
+INPUT DATA
+You will receive a structured text description of a satellite anomaly including coordinates and confidence signals.
+
+INTERNAL EVALUATION PROTOCOL
+Before producing the final output, internally evaluate:
+1. Historical & contextual verification
+2. Geospatial & infrastructure scan (5km radius)
+3. Predictive simulation (T+1 to T+6 hours)
+4. Logistics & jurisdiction ownership
+
+FINAL OUTPUT RULES
+Output ONLY valid JSON.
+No markdown.
+No explanations.
+No trailing text.
+
+JSON FORMAT:
+{
+  "status": "CRITICAL" | "MONITOR" | "ALL_CLEAR",
+  "anomaly_type": "String",
+  "impact_analysis": {
+    "immediate_radius_km": Number,
+    "threatened_infrastructure": ["List"],
+    "projected_cost_of_inaction": "String"
+  },
+  "tactical_response": {
+    "primary_agency": "String",
+    "recommended_assets": ["Asset 1", "Asset 2"],
+    "emergency_message": "Short alert for operators"
+  }
+}
+"""
+
+    if st.button("⚡ Generate Tactical Action Plan"):
+        with st.spinner("⚡ Cerebras computing strategy…"):
             response = client.chat.completions.create(
                 model="llama-3.1-8b",
                 messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are an emergency wildfire risk assessment AI. "
-                            "Be concise, actionable, and structured."
-                        )
-                    },
-                    {
-                        "role": "user",
-                        "content": fire_context(df.loc[fire_idx])
-                    }
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": anomaly_context(df.loc[fire_idx])}
                 ],
-                max_completion_tokens=300,
-                temperature=0.2
+                max_completion_tokens=350,
+                temperature=0.1
             )
 
-        st.success("Analysis complete")
-        st.markdown("### 🔥 Risk Assessment")
-        st.markdown(response.choices[0].message.content)
+        st.success("Tactical plan generated")
+        st.markdown("### 📡 Tactical Action Plan (JSON)")
+        st.code(response.choices[0].message.content, language="json")
 
 # =========================
 # Footer
 # =========================
 st.markdown("---")
-st.caption("NASA FIRMS × Cerebras Wafer-Scale Engine — Real-time inference for time-critical decisions")
+st.caption("Cerebras Wafer-Scale Engine — Real-time strategic reasoning on live satellite data")
