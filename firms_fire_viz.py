@@ -5,7 +5,6 @@ import folium
 from streamlit_folium import folium_static
 from datetime import datetime, timedelta
 from io import StringIO
-import os
 
 # =========================
 # Cerebras
@@ -28,6 +27,25 @@ st.title("🔥 Wildfire Detection & Risk Analysis")
 st.caption("NASA FIRMS × Cerebras Wafer-Scale Inference")
 
 # =========================
+# How to Run Box
+# =========================
+st.info(
+    """
+### ▶️ How to Run This Demo
+
+This demo combines **live satellite wildfire detections** with **ultra-low-latency Cerebras inference**.
+All API keys are **preconfigured** — no setup required.
+
+**Steps:**
+1. Adjust the **date range** and **bounding box** in the sidebar (or keep defaults)
+2. Click **🔍 Fetch Fire Data** to load satellite detections
+3. Select a fire and click **⚡ Analyze Fire Risk** to run instant Cerebras analysis
+
+⚡ Cerebras enables real-time, multi-step reasoning on fresh satellite data — eliminating traditional processing delays.
+"""
+)
+
+# =========================
 # Session State
 # =========================
 if "df" not in st.session_state:
@@ -35,15 +53,6 @@ if "df" not in st.session_state:
 
 # =========================
 # Sidebar Inputs
-# =========================
-st.sidebar.header("🔑 API Keys")
-
-firms_api_key = "7a8749d24a541283600ded9b708c220c"
-
-cerebras_api_key = "csk-y2vf6htw5pp3vhwy63x5j2684yn6r2vwykffke4534tdpfyk"
-
-# =========================
-# Date + Area
 # =========================
 st.sidebar.header("📅 Date Range")
 
@@ -59,15 +68,21 @@ end_date = st.sidebar.date_input(
 
 st.sidebar.header("📍 Bounding Box")
 
-min_lat = st.sidebar.number_input("Min Lat", value=34.0)
-min_lon = st.sidebar.number_input("Min Lon", value=-120.0)
-max_lat = st.sidebar.number_input("Max Lat", value=38.0)
-max_lon = st.sidebar.number_input("Max Lon", value=-115.0)
+min_lat = st.sidebar.number_input("Min Latitude", value=34.0)
+min_lon = st.sidebar.number_input("Min Longitude", value=-120.0)
+max_lat = st.sidebar.number_input("Max Latitude", value=38.0)
+max_lon = st.sidebar.number_input("Max Longitude", value=-115.0)
 
 satellite = st.sidebar.selectbox(
     "Satellite Source",
     ["VIIRS_SNPP_NRT", "VIIRS_NOAA20_NRT", "MODIS_NRT"]
 )
+
+# =========================
+# API Keys (Preloaded)
+# =========================
+firms_api_key = "7a8749d24a541283600ded9b708c220c"
+cerebras_api_key = "csk-y2vf6htw5pp3vhwy63x5j2684yn6r2vwykffke4534tdpfyk"
 
 # =========================
 # FIRMS Fetch
@@ -86,10 +101,6 @@ def fetch_firms(api_key, source, area, start_date, days):
 # Fetch Button
 # =========================
 if st.sidebar.button("🔍 Fetch Fire Data"):
-    if not firms_api_key:
-        st.error("Enter FIRMS API key")
-        st.stop()
-
     with st.spinner("Fetching wildfire data…"):
         area = f"{min_lon},{min_lat},{max_lon},{max_lat}"
         days = (end_date - start_date).days + 1
@@ -140,8 +151,6 @@ st.subheader("🧠 Cerebras Fire Risk Analysis")
 
 if not CEREBRAS_AVAILABLE:
     st.warning("Cerebras SDK not installed")
-elif not cerebras_api_key:
-    st.info("Enter a Cerebras API key to enable analysis.")
 elif df is None or df.empty:
     st.info("Fetch fire data first.")
 else:
@@ -171,9 +180,7 @@ Analyze:
 """
 
     if st.button("⚡ Analyze Fire Risk"):
-        st.write("🚀 Running Cerebras inference…")
-
-        with st.spinner("Ultra-fast reasoning on WSE…"):
+        with st.spinner("⚡ Running ultra-fast Cerebras inference…"):
             response = client.chat.completions.create(
                 model="llama-3.1-8b",
                 messages=[
@@ -201,4 +208,4 @@ Analyze:
 # Footer
 # =========================
 st.markdown("---")
-st.caption("NASA FIRMS × Cerebras Wafer-Scale Engine")
+st.caption("NASA FIRMS × Cerebras Wafer-Scale Engine — Real-time inference for time-critical decisions")
