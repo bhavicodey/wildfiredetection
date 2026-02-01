@@ -175,7 +175,7 @@ Analyze:
 
         with st.spinner("Ultra-fast reasoning on WSE…"):
             response = client.chat.completions.create(
-                model="qwen-3-32b",
+                model="llama-3.1-8b",
                 messages=[
                     {
                         "role": "system",
