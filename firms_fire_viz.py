@@ -42,11 +42,13 @@ fetch_data = st.sidebar.button("🔍 Fetch Fire Data")
 # =========================
 # FIRMS FETCH
 # =========================
+from io import StringIO
+
 def get_firms_data(api_key, source, area, start_date, day_range):
     url = f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{api_key}/{source}/{area}/{day_range}/{start_date}"
     r = requests.get(url, timeout=30)
     r.raise_for_status()
-    return pd.read_csv(pd.compat.StringIO(r.text))
+    return pd.read_csv(StringIO(r.text))
 
 # =========================
 # MAP
