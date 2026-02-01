@@ -85,6 +85,22 @@ def get_firms_data(api_key, source, area, date_range):
         from io import StringIO
         df = pd.read_csv(StringIO(response.text))
         
+        # Convert data types - FIRMS sometimes returns confidence as string ('l', 'n', 'h') or numeric
+        # Handle both cases
+        if 'confidence' in df.columns:
+            # If confidence is categorical (l/n/h), convert to numeric
+            if df['confidence'].dtype == 'object':
+                confidence_map = {'l': 30, 'n': 50, 'h': 80, 'low': 30, 'nominal': 50, 'high': 80}
+                df['confidence'] = df['confidence'].map(lambda x: confidence_map.get(str(x).lower(), 50))
+            # Convert to numeric, handling any errors
+            df['confidence'] = pd.to_numeric(df['confidence'], errors='coerce').fillna(50)
+        
+        # Convert other numeric columns
+        numeric_cols = ['latitude', 'longitude', 'bright_ti4', 'frp']
+        for col in numeric_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+        
         return df, None
     except requests.exceptions.RequestException as e:
         return None, str(e)
@@ -118,12 +134,27 @@ def create_fire_map(df, bbox):
     if len(df) > 0:
         # Color coding by confidence level
         def get_color(confidence):
-            if confidence >= 80:
-                return 'red'
-            elif confidence >= 50:
-                return 'orange'
-            else:
-                return 'yellow'
+            # Handle both numeric and string confidence values
+            try:
+                if isinstance(confidence, str):
+                    conf_lower = confidence.lower()
+                    if conf_lower in ['h', 'high']:
+                        return 'red'
+                    elif conf_lower in ['n', 'nominal']:
+                        return 'orange'
+                    else:
+                        return 'yellow'
+                else:
+                    # Numeric confidence
+                    conf_num = float(confidence)
+                    if conf_num >= 80:
+                        return 'red'
+                    elif conf_num >= 50:
+                        return 'orange'
+                    else:
+                        return 'yellow'
+            except:
+                return 'yellow'  # Default color if we can't parse
         
         # Add markers (limit to 2000 for performance)
         sample_df = df.head(2000) if len(df) > 2000 else df
@@ -201,11 +232,17 @@ elif fetch_data:
                     with col1:
                         st.metric("Total Fires", len(df))
                     with col2:
-                        high_conf = len(df[df['confidence'] >= 80])
+                        try:
+                            high_conf = len(df[df['confidence'] >= 80])
+                        except:
+                            high_conf = 0
                         st.metric("High Confidence", high_conf)
                     with col3:
-                        avg_frp = df['frp'].mean()
-                        st.metric("Avg Fire Power", f"{avg_frp:.1f} MW")
+                        try:
+                            avg_frp = df['frp'].mean()
+                            st.metric("Avg Fire Power", f"{avg_frp:.1f} MW")
+                        except:
+                            st.metric("Avg Fire Power", "N/A")
                     with col4:
                         unique_days = df['acq_date'].nunique()
                         st.metric("Days with Fires", unique_days)
