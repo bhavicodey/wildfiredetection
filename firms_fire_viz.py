@@ -20,7 +20,7 @@ except ImportError:
 # =========================
 # PAGE CONFIG
 # =========================
-st.set_page_config(page_title="🔥 Wildfire Intelligence (Cerebras)", layout="wide")
+st.set_page_config(page_title="🔥 Wildfire Intelligence", layout="wide")
 st.title("🔥 Wildfire Intelligence Platform")
 st.markdown("Satellite fire detection + **real-time reasoning on Cerebras**")
 
@@ -54,10 +54,17 @@ data_source = st.sidebar.selectbox(
     ["VIIRS_NOAA20_NRT", "VIIRS_SNPP_NRT", "MODIS_NRT"]
 )
 
-fetch_data = st.sidebar.button("🔍 Fetch Fire Data")
+# =========================
+# SESSION STATE FOR BUTTON
+# =========================
+if "data_loaded" not in st.session_state:
+    st.session_state.data_loaded = False
+
+if st.sidebar.button("🔍 Fetch Fire Data"):
+    st.session_state.data_loaded = True
 
 # =========================
-# FIRMS API
+# FIRMS API FUNCTION
 # =========================
 def get_firms_data(api_key, source, area, start_date, day_range):
     url = f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{api_key}/{source}/{area}/{day_range}/{start_date}"
@@ -66,12 +73,11 @@ def get_firms_data(api_key, source, area, start_date, day_range):
     return pd.read_csv(StringIO(r.text))
 
 # =========================
-# MAP
+# MAP FUNCTION
 # =========================
 def create_map(df, bbox):
     center = [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2]
     m = folium.Map(location=center, zoom_start=6)
-
     for _, r in df.iterrows():
         folium.CircleMarker(
             location=[r["latitude"], r["longitude"]],
@@ -86,9 +92,9 @@ def create_map(df, bbox):
 # CEREBRAS SETUP
 # =========================
 SYSTEM_PROMPT = """
-You are a wildfire risk assessment AI used by emergency response agencies.
+You are a wildfire risk assessment AI.
 
-Analyze the fire event and return ONLY valid JSON with:
+Analyze the fire event and return ONLY valid JSON:
 - risk_level (LOW, MEDIUM, HIGH, EXTREME)
 - spread_probability_12h (0–1)
 - primary_risk_factors (list)
@@ -138,11 +144,87 @@ def analyze_fire(client, context):
 # =========================
 # MAIN APP
 # =========================
-if fetch_data:
+if st.session_state.data_loaded:
+    st.write("🧠 Entered main data block")
+
     if not firms_api_key:
         st.error("❌ FIRMS API key required")
-        st.stop()
+    else:
+        with st.spinner("Fetching FIRMS data..."):
+            try:
+                area = f"{min_lon},{min_lat},{max_lon},{max_lat}"
+                day_range = (end_date - start_date).days + 1
+                st.write(f"📡 Fetching {day_range} days of data from area {area} using {data_source}...")
 
-    with st.status("🛰️ Fetching FIRMS satellite data...", expanded=True) as status:
-        area = f"{min_lon},{min_lat},{max_lon},{max_lat}"
-        day_range = (end_date - start_date).days + 1
+                df = get_firms_data(
+                    firms_api_key,
+                    data_source,
+                    area,
+                    start_date.strftime("%Y-%m-%d"),
+                    day_range
+                )
+
+                st.write(f"✅ Retrieved {len(df)} rows")
+
+                if len(df) == 0:
+                    st.warning("⚠️ FIRMS returned no fire detections for this area/date range")
+
+            except Exception as e:
+                st.error("❌ Failed to fetch FIRMS data")
+                st.exception(e)
+                df = pd.DataFrame()  # ensure df exists
+
+        # Map
+        if not df.empty and all(col in df.columns for col in ["latitude", "longitude"]):
+            st.subheader("🔥 Fire Map")
+            folium_static(create_map(df, [min_lat, min_lon, max_lat, max_lon]), height=600)
+        else:
+            st.warning("⚠️ Cannot render map: missing latitude/longitude columns")
+
+        # Table
+        st.subheader("Fire Data")
+        st.dataframe(df.head(100), use_container_width=True)
+
+        # Raw CSV for debug
+        st.subheader("📄 Raw FIRMS CSV Preview")
+        st.text(df.head(5).to_csv(index=False))
+
+        # Cerebras Analysis
+        st.subheader("🧠 Cerebras Wildfire Risk Analysis")
+        if cerebras_api_key and CEREBRAS_AVAILABLE:
+            client = get_cerebras_client(cerebras_api_key)
+            if not df.empty:
+                selected = st.selectbox("Select fire index", df.index[:50])
+
+                if st.button("Analyze Fire Risk"):
+                    context = build_fire_context(df.loc[selected])
+                    st.subheader("📤 Cerebras Input")
+                    st.json(context)
+
+                    try:
+                        start = time.time()
+                        raw_output = analyze_fire(client, context)
+                        elapsed = time.time() - start
+
+                        st.subheader("📥 Raw Cerebras Output")
+                        st.code(raw_output)
+
+                        analysis = json.loads(raw_output)
+
+                        st.success(f"⚡ Inference completed in {elapsed:.2f} seconds")
+                        st.error(f"🔥 Risk Level: {analysis['risk_level']}")
+                        st.metric("Spread Probability (12h)", analysis["spread_probability_12h"])
+
+                        st.markdown("### Risk Factors")
+                        for f in analysis["primary_risk_factors"]:
+                            st.write(f"- {f}")
+
+                        st.markdown("### Recommended Actions")
+                        for a in analysis["recommended_actions"]:
+                            st.write(f"- {a}")
+
+                    except Exception as e:
+                        st.error("❌ Cerebras inference failed")
+                        st.exception(e)
+        else:
+            st.info("Enter a Cerebras API key to enable analysis.")
