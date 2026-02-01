@@ -145,4 +145,4 @@ if fetch_data:
 
     with st.status("🛰️ Fetching FIRMS satellite data...", expanded=True) as status:
         area = f"{min_lon},{min_lat},{max_lon},{max_lat}"
-        day_range = (end_date - start_date).d_
+        day_range = (end_date - start_date).days + 1
