@@ -4,23 +4,40 @@ import pandas as pd
 import folium
 from streamlit_folium import folium_static
 from datetime import datetime, timedelta
-from cerebras.cloud.sdk import Cerebras
+from io import StringIO
 import json
+import time
+
+# =========================
+# SAFE CEREBRAS IMPORT
+# =========================
+try:
+    from cerebras.cloud import Cerebras
+    CEREBRAS_AVAILABLE = True
+except ImportError:
+    CEREBRAS_AVAILABLE = False
 
 # =========================
 # PAGE CONFIG
 # =========================
 st.set_page_config(page_title="🔥 Wildfire Intelligence (Cerebras)", layout="wide")
-st.title("🔥 Real-Time Wildfire Intelligence Platform")
-st.markdown("Satellite detection + ultra-fast reasoning with **Cerebras WSE**")
+st.title("🔥 Wildfire Intelligence Platform")
+st.markdown("Satellite fire detection + **real-time reasoning on Cerebras**")
 
 # =========================
-# SIDEBAR CONFIG
+# SIDEBAR
 # =========================
 st.sidebar.header("Configuration")
 
 firms_api_key = st.sidebar.text_input("NASA FIRMS API Key", type="password")
 cerebras_api_key = st.sidebar.text_input("Cerebras API Key", type="password")
+
+st.sidebar.markdown("### System Status")
+st.sidebar.success("🛰️ FIRMS Ready")
+if cerebras_api_key and CEREBRAS_AVAILABLE:
+    st.sidebar.success("🧠 Cerebras Connected")
+else:
+    st.sidebar.warning("🧠 Cerebras Not Connected")
 
 st.sidebar.subheader("Date Range")
 start_date = st.sidebar.date_input("Start Date", datetime.now() - timedelta(days=3))
@@ -40,10 +57,8 @@ data_source = st.sidebar.selectbox(
 fetch_data = st.sidebar.button("🔍 Fetch Fire Data")
 
 # =========================
-# FIRMS FETCH
+# FIRMS API
 # =========================
-from io import StringIO
-
 def get_firms_data(api_key, source, area, start_date, day_range):
     url = f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{api_key}/{source}/{area}/{day_range}/{start_date}"
     r = requests.get(url, timeout=30)
@@ -65,25 +80,23 @@ def create_map(df, bbox):
             fill=True,
             fill_opacity=0.7
         ).add_to(m)
-
     return m
 
 # =========================
 # CEREBRAS SETUP
 # =========================
-def get_cerebras_client(api_key):
-    return Cerebras(api_key=api_key)
-
 SYSTEM_PROMPT = """
 You are a wildfire risk assessment AI used by emergency response agencies.
 
-Analyze the provided fire event and context.
-Return ONLY valid JSON with:
+Analyze the fire event and return ONLY valid JSON with:
 - risk_level (LOW, MEDIUM, HIGH, EXTREME)
 - spread_probability_12h (0–1)
 - primary_risk_factors (list)
 - recommended_actions (list)
 """
+
+def get_cerebras_client(api_key):
+    return Cerebras(api_key=api_key)
 
 def build_fire_context(row):
     return {
@@ -120,57 +133,16 @@ def analyze_fire(client, context):
         temperature=0.2,
         max_completion_tokens=600
     )
-    return json.loads(response.choices[0].message.content)
+    return response.choices[0].message.content
 
 # =========================
 # MAIN APP
 # =========================
 if fetch_data:
     if not firms_api_key:
-        st.error("Please enter FIRMS API key.")
-    else:
-        with st.spinner("Fetching satellite fire detections..."):
-            area = f"{min_lon},{min_lat},{max_lon},{max_lat}"
-            day_range = (end_date - start_date).days + 1
-            df = get_firms_data(
-                firms_api_key,
-                data_source,
-                area,
-                start_date.strftime("%Y-%m-%d"),
-                day_range
-            )
+        st.error("❌ FIRMS API key required")
+        st.stop()
 
-        st.success(f"🔥 {len(df)} fire detections found")
-
-        st.subheader("Fire Map")
-        folium_static(create_map(df, [min_lat, min_lon, max_lat, max_lon]), height=600)
-
-        st.subheader("Fire Data")
-        st.dataframe(df.head(100), use_container_width=True)
-
-        # =========================
-        # CEREBRAS ANALYSIS
-        # =========================
-        st.subheader("🧠 Cerebras Real-Time Risk Analysis")
-
-        if cerebras_api_key:
-            client = get_cerebras_client(cerebras_api_key)
-            selected = st.selectbox("Select fire index", df.index[:50])
-
-            if st.button("Analyze Fire Risk"):
-                with st.spinner("Running ultra-fast inference on Cerebras..."):
-                    context = build_fire_context(df.loc[selected])
-                    result = analyze_fire(client, context)
-
-                st.error(f"🔥 Risk Level: {result['risk_level']}")
-                st.metric("Spread Probability (12h)", result["spread_probability_12h"])
-
-                st.markdown("### Risk Factors")
-                for f in result["primary_risk_factors"]:
-                    st.write(f"- {f}")
-
-                st.markdown("### Recommended Actions")
-                for a in result["recommended_actions"]:
-                    st.write(f"- {a}")
-        else:
-            st.info("Enter a Cerebras API key to enable intelligence analysis.")
+    with st.status("🛰️ Fetching FIRMS satellite data...", expanded=True) as status:
+        area = f"{min_lon},{min_lat},{max_lon},{max_lat}"
+        day_range = (end_date - start_date).d_
