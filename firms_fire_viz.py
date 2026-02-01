@@ -39,12 +39,13 @@ if "data_loaded" not in st.session_state:
 # =========================
 st.sidebar.header("Configuration")
 
-# API Keys (stored in session_state)
+# FIRMS API Key
 st.session_state.firms_api_key = st.sidebar.text_input(
     "NASA FIRMS API Key",
     value=st.session_state.firms_api_key,
     type="password"
 )
+# Cerebras API Key
 st.session_state.cerebras_api_key = st.sidebar.text_input(
     "Cerebras API Key",
     value=st.session_state.cerebras_api_key,
@@ -77,9 +78,12 @@ data_source = st.sidebar.selectbox(
     ["VIIRS_NOAA20_NRT", "VIIRS_SNPP_NRT", "MODIS_NRT"]
 )
 
-# Fetch button
+# =========================
+# Fetch Button
+# =========================
 if st.sidebar.button("🔍 Fetch Fire Data"):
     st.session_state.data_loaded = True
+    st.experimental_rerun()  # Immediately rerun so data block executes
 
 # =========================
 # FIRMS API FUNCTION
@@ -157,4 +161,99 @@ def analyze_fire(client, context):
         temperature=0.2,
         max_completion_tokens=600
     )
-    return response.choices[0].message.c
+    return response.choices[0].message.content
+
+# =========================
+# MAIN APP BLOCK
+# =========================
+if st.session_state.data_loaded:
+    st.write("🧠 Entered main data block")
+    
+    # Debug info
+    st.write({
+        "data_loaded": st.session_state.data_loaded,
+        "firms_key_present": bool(st.session_state.firms_api_key),
+        "cerebras_key_present": bool(st.session_state.cerebras_api_key)
+    })
+
+    if not st.session_state.firms_api_key:
+        st.error("❌ FIRMS API key required")
+    else:
+        with st.spinner("Fetching FIRMS data..."):
+            try:
+                area = f"{min_lon},{min_lat},{max_lon},{max_lat}"
+                day_range = (end_date - start_date).days + 1
+                st.write(f"📡 Fetching {day_range} days of data from area {area} using {data_source}...")
+
+                df = get_firms_data(
+                    st.session_state.firms_api_key,
+                    data_source,
+                    area,
+                    start_date.strftime("%Y-%m-%d"),
+                    day_range
+                )
+
+                st.write(f"✅ Retrieved {len(df)} rows")
+
+                if len(df) == 0:
+                    st.warning("⚠️ FIRMS returned no fire detections for this area/date range")
+
+            except Exception as e:
+                st.error("❌ Failed to fetch FIRMS data")
+                st.exception(e)
+                df = pd.DataFrame()  # ensure df exists
+
+        # Map
+        if not df.empty and all(col in df.columns for col in ["latitude", "longitude"]):
+            st.subheader("🔥 Fire Map")
+            folium_static(create_map(df, [min_lat, min_lon, max_lat, max_lon]), height=600)
+        else:
+            st.warning("⚠️ Cannot render map: missing latitude/longitude columns")
+
+        # Table
+        st.subheader("Fire Data")
+        st.dataframe(df.head(100), use_container_width=True)
+
+        # Raw CSV for debug
+        st.subheader("📄 Raw FIRMS CSV Preview")
+        st.text(df.head(5).to_csv(index=False))
+
+        # Cerebras Analysis
+        st.subheader("🧠 Cerebras Wildfire Risk Analysis")
+        if st.session_state.cerebras_api_key and CEREBRAS_AVAILABLE:
+            client = get_cerebras_client(st.session_state.cerebras_api_key)
+            if not df.empty:
+                selected = st.selectbox("Select fire index", df.index[:50])
+
+                if st.button("Analyze Fire Risk"):
+                    context = build_fire_context(df.loc[selected])
+                    st.subheader("📤 Cerebras Input")
+                    st.json(context)
+
+                    try:
+                        start = time.time()
+                        raw_output = analyze_fire(client, context)
+                        elapsed = time.time() - start
+
+                        st.subheader("📥 Raw Cerebras Output")
+                        st.code(raw_output)
+
+                        analysis = json.loads(raw_output)
+
+                        st.success(f"⚡ Inference completed in {elapsed:.2f} seconds")
+                        st.error(f"🔥 Risk Level: {analysis['risk_level']}")
+                        st.metric("Spread Probability (12h)", analysis["spread_probability_12h"])
+
+                        st.markdown("### Risk Factors")
+                        for f in analysis["primary_risk_factors"]:
+                            st.write(f"- {f}")
+
+                        st.markdown("### Recommended Actions")
+                        for a in analysis["recommended_actions"]:
+                            st.write(f"- {a}")
+
+                    except Exception as e:
+                        st.error("❌ Cerebras inference failed")
+                        st.exception(e)
+        else:
+            st.info("Enter a Cerebras API key to enable analysis.")
