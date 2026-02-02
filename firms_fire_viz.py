@@ -24,25 +24,40 @@ st.set_page_config(
 )
 
 st.title("🌍 Planetary Operations Core")
-st.caption("Satellite Anomaly Detection × Cerebras Wafer-Scale Inference")
+st.caption("Satellite Anomaly Detection × Cerebras Wafer-Scale Reasoning")
 
 # =========================
-# How to Run Box
+# What Cerebras Does (BEFORE CLICK)
+# =========================
+st.warning(
+    """
+### 🧠 Why Cerebras Is Used Here
+
+Satellite systems already **detect anomalies** — the bottleneck is **reasoning speed**.
+
+Cerebras performs **multi-step geospatial, legal, and operational reasoning**
+**while the satellite is still overhead**, answering:
+- *Is this real or a false positive?*
+- *Who owns jurisdiction?*
+- *What assets should respond — right now?*
+
+This turns satellite imagery into **instant tactical decisions**, not delayed reports.
+"""
+)
+
+# =========================
+# How to Run
 # =========================
 st.info(
     """
-### ▶️ How to Run This Demo
+### ▶️ How to Run
 
-This demo combines **live satellite anomaly detections** with **ultra-low-latency Cerebras reasoning**.
+1. Keep defaults or adjust **date & region**
+2. Click **🔍 Fetch Satellite Detections**
+3. Click a point on the map or select it below
+4. Click **⚡ Generate Tactical Action Plan**
 
-**All API keys are preconfigured — no setup required.**
-
-**Steps:**
-1. Adjust the **date range** and **bounding box** (or keep defaults)
-2. Click **🔍 Fetch Fire Data** to load satellite detections
-3. Select an anomaly and click **⚡ Generate Tactical Action Plan**
-
-⚡ Cerebras enables **real-time multi-layer reasoning** on raw satellite data — eliminating traditional processing delays.
+All API keys are preconfigured.
 """
 )
 
@@ -53,18 +68,15 @@ if "df" not in st.session_state:
     st.session_state.df = None
 
 # =========================
-# Sidebar Inputs
+# Sidebar Controls
 # =========================
 st.sidebar.header("📅 Date Range")
 
 start_date = st.sidebar.date_input(
-    "Start Date",
-    datetime.utcnow() - timedelta(days=3)
+    "Start Date", datetime.utcnow() - timedelta(days=3)
 )
-
 end_date = st.sidebar.date_input(
-    "End Date",
-    datetime.utcnow()
+    "End Date", datetime.utcnow()
 )
 
 st.sidebar.header("📍 Bounding Box")
@@ -80,7 +92,7 @@ satellite = st.sidebar.selectbox(
 )
 
 # =========================
-# API Keys (Preloaded)
+# API Keys
 # =========================
 firms_api_key = "7a8749d24a541283600ded9b708c220c"
 cerebras_api_key = "csk-y2vf6htw5pp3vhwy63x5j2684yn6r2vwykffke4534tdpfyk"
@@ -90,10 +102,7 @@ cerebras_api_key = "csk-y2vf6htw5pp3vhwy63x5j2684yn6r2vwykffke4534tdpfyk"
 # =========================
 @st.cache_data(ttl=300)
 def fetch_firms(api_key, source, area, start_date, days):
-    url = (
-        f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/"
-        f"{api_key}/{source}/{area}/{days}/{start_date}"
-    )
+    url = f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{api_key}/{source}/{area}/{days}/{start_date}"
     r = requests.get(url, timeout=30)
     r.raise_for_status()
     return pd.read_csv(StringIO(r.text))
@@ -101,11 +110,10 @@ def fetch_firms(api_key, source, area, start_date, days):
 # =========================
 # Fetch Button
 # =========================
-if st.sidebar.button("🔍 Fetch Fire Data"):
+if st.sidebar.button("🔍 Fetch Satellite Detections"):
     with st.spinner("Fetching satellite detections…"):
         area = f"{min_lon},{min_lat},{max_lon},{max_lat}"
         days = (end_date - start_date).days + 1
-
         df = fetch_firms(
             firms_api_key,
             satellite,
@@ -114,135 +122,121 @@ if st.sidebar.button("🔍 Fetch Fire Data"):
             days
         )
 
+        # Time formatting
+        df["acq_time_utc"] = df["acq_time"].astype(str).str.zfill(4)
+        df["acq_time_utc"] = df["acq_time_utc"].str[:2] + ":" + df["acq_time_utc"].str[2:]
+        df["timestamp_utc"] = df["acq_date"] + " " + df["acq_time_utc"] + " UTC"
+
         st.session_state.df = df
 
     st.success(f"Loaded {len(df)} satellite detections")
 
 # =========================
-# Display Data
+# Map Visualization
 # =========================
 df = st.session_state.df
 
 if df is not None and not df.empty:
-    st.subheader("🗺️ Satellite Detection Map")
+    st.subheader("🗺️ Interactive Satellite Detection Map")
 
-    if "latitude" not in df.columns or "longitude" not in df.columns:
-        st.error(f"Expected latitude/longitude columns not found. Columns: {list(df.columns)}")
-        st.stop()
+    center_lat = df["latitude"].mean()
+    center_lon = df["longitude"].mean()
 
-    center_lat = df["latitude"].astype(float).mean()
-    center_lon = df["longitude"].astype(float).mean()
-    
-    m = folium.Map(
-        location=[center_lat, center_lon],
-        zoom_start=6
-    )
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=6)
 
-    for _, row in df.head(2000).iterrows():
+    for idx, row in df.iterrows():
+        # Color by confidence proxy (FRP)
+        color = "green" if row.frp < 10 else "orange" if row.frp < 50 else "red"
+        radius = min(12, max(4, row.frp / 5))
+
+        popup = folium.Popup(
+            f"""
+<b>ID:</b> {idx}<br>
+<b>Lat/Lon:</b> {row.latitude}, {row.longitude}<br>
+<b>Time:</b> {row.timestamp_utc}<br>
+<b>FRP:</b> {row.frp}<br>
+<b>Brightness:</b> {row.bright_ti4}<br>
+<b>Note:</b> Possible false positives near landfills or solar facilities
+""",
+            max_width=300
+        )
+
         folium.CircleMarker(
             location=[row.latitude, row.longitude],
-            radius=4,
-            color="red",
+            radius=radius,
+            color=color,
             fill=True,
-            fill_opacity=0.7
+            fill_opacity=0.75,
+            popup=popup
         ).add_to(m)
 
-    folium_static(m, width=1200, height=500)
+    folium_static(m, width=1200, height=550)
 
-    st.subheader("📊 Detection Table")
-    st.dataframe(df.head(100), use_container_width=True)
+    with st.expander("ℹ️ Column Meanings"):
+        st.markdown(
+            """
+- **latitude / longitude** — Satellite-detected anomaly location  
+- **acq_date / acq_time** — Acquisition time (UTC)  
+- **bright_ti4** — Thermal brightness (Kelvin)  
+- **frp** — Fire Radiative Power (proxy for intensity)  
+- **Lower FRP ≠ safe** — context matters (location, infrastructure, wind)
+"""
+        )
 
 # =========================
-# Cerebras Analysis
+# Cerebras Tactical Reasoning
 # =========================
 st.subheader("🧠 Cerebras Tactical Reasoning Engine")
 
-if not CEREBRAS_AVAILABLE:
-    st.warning("Cerebras SDK not installed")
-elif df is None or df.empty:
-    st.info("Fetch satellite data first.")
-else:
+if df is not None and not df.empty and CEREBRAS_AVAILABLE:
     client = Cerebras(api_key=cerebras_api_key)
 
     fire_idx = st.selectbox(
-        "Select a satellite anomaly",
-        df.index[:50]
+        "Select anomaly ID (map + table aligned)",
+        df.index.tolist()
     )
 
-def anomaly_context(row):
-    return f"""
-Satellite observation detected:
+    def anomaly_context(row):
+        return f"""
+Satellite anomaly detected:
 Latitude: {row.latitude}
 Longitude: {row.longitude}
-Date: {row.acq_date}
-Time: {row.acq_time}
+Timestamp (UTC): {row.timestamp_utc}
 Thermal Brightness: {row.bright_ti4}
 Radiative Power: {row.frp}
 """
 
-SYSTEM_PROMPT = """
-You are the Planetary Operations Core, a high-frequency strategic AI designed to protect critical infrastructure and human life.
+    SYSTEM_PROMPT = """
+You are the Planetary Operations Core — a real-time strategic AI for satellite anomaly response.
 
-INPUT FORMAT
-You will receive satellite anomaly data with coordinates, thermal readings, and confidence signals.
+Your task is to instantly reason over:
+• Geospatial context
+• Infrastructure proximity
+• Jurisdictional authority
+• Likelihood of false positives (e.g., solar facilities, landfills)
+• Immediate operational response
 
-ANALYSIS FRAMEWORK
-Evaluate these factors internally:
-1. Historical patterns and contextual verification
-2. Geospatial infrastructure scan (5km radius)
-3. Predictive threat modeling (T+1 to T+6 hours)
-4. Jurisdictional authority and asset availability
-
-CRITICAL OUTPUT RULES
-Your response must be ONLY the JSON object below. Nothing else.
-
-Forbidden elements:
-- No <think> tags
-- No reasoning exposition
-- No markdown (```)
-- No explanatory text
-- No preamble or postamble
-- No internal monologue
-
-Required: Pure JSON only. Start with { and end with }
-
-REQUIRED JSON STRUCTURE:
-{
-  "status": "CRITICAL" | "MONITOR" | "ALL_CLEAR",
-  "anomaly_type": "String describing the threat",
-  "impact_analysis": {
-    "immediate_radius_km": Number,
-    "threatened_infrastructure": ["Infrastructure type 1", "Infrastructure type 2"],
-    "projected_cost_of_inaction": "Quantified impact estimate"
-  },
-  "tactical_response": {
-    "primary_agency": "Lead responding organization",
-    "recommended_assets": ["Asset 1", "Asset 2", "Asset 3"],
-    "emergency_message": "Concise operator alert (max 100 chars)"
-  }
-}
-
-Begin your response with { immediately.
+Output a concise tactical plan suitable for human operators.
 """
 
-if st.button("⚡ Generate Tactical Action Plan"):
-    with st.spinner("⚡ Cerebras computing strategy…"):
-        response = client.chat.completions.create(
-            model="llama3.1-8b",
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": anomaly_context(df.loc[fire_idx])}
-            ],
-            max_completion_tokens=350,
-            temperature=0.1
-        )
-    st.success("Tactical plan generated")
-    st.markdown("### 📡 Tactical Action Plan (JSON)")
-    st.code(response.choices[0].message.content, language="json")
+    if st.button("⚡ Generate Tactical Action Plan"):
+        with st.spinner("⚡ Cerebras reasoning in real time…"):
+            response = client.chat.completions.create(
+                model="llama-3.1-8b",
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": anomaly_context(df.loc[fire_idx])}
+                ],
+                max_completion_tokens=350,
+                temperature=0.1
+            )
+
+        st.success("Tactical plan generated")
+        st.markdown("### 📡 Tactical Assessment")
+        st.markdown(response.choices[0].message.content)
 
 # =========================
 # Footer
 # =========================
 st.markdown("---")
-st.caption("Cerebras Wafer-Scale Engine — Real-time strategic reasoning on live satellite data")
-
+st.caption("Cerebras Wafer-Scale Engine — Turning satellite pixels into decisions, instantly")
