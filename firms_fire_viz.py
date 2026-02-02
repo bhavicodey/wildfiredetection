@@ -228,7 +228,7 @@ Begin your response with { immediately.
 if st.button("⚡ Generate Tactical Action Plan"):
     with st.spinner("⚡ Cerebras computing strategy…"):
         response = client.chat.completions.create(
-            model="qwen-3-32b",
+            model="llama-3.3-70b",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": anomaly_context(df.loc[fire_idx])}
