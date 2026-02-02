@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from io import StringIO
 
 # =========================
-# Cerebras
+# Cerebras SDK
 # =========================
 try:
     from cerebras.cloud.sdk import Cerebras
@@ -108,6 +108,16 @@ def fetch_firms(api_key, source, area, start_date, days):
     r = requests.get(url, timeout=30)
     r.raise_for_status()
     df = pd.read_csv(StringIO(r.text))
+    
+    # Safely create timestamp_utc
+    if not df.empty and "acq_date" in df.columns and "acq_time" in df.columns:
+        df["timestamp_utc"] = pd.to_datetime(
+            df["acq_date"] + " " + df["acq_time"].astype(str).str.zfill(4),
+            format="%Y-%m-%d %H%M",
+            utc=True
+        )
+    else:
+        df["timestamp_utc"] = pd.NaT
     return df
 
 # =========================
@@ -130,13 +140,6 @@ if st.sidebar.button("🔍 Fetch Fire Data"):
             st.error("Invalid bounding box or no detections returned.")
             st.stop()
 
-        # Format UTC timestamp
-        df["timestamp_utc"] = pd.to_datetime(
-            df["acq_date"] + " " + df["acq_time"].astype(str).str.zfill(4),
-            format="%Y-%m-%d %H%M",
-            utc=True
-        )
-
         st.session_state.df = df
 
     st.success(f"Loaded {len(df)} satellite detections")
@@ -156,20 +159,21 @@ if df is not None and not df.empty:
 
     for idx, row in df.iterrows():
         conf = normalize_confidence(row.get("confidence", 50))
-
+        utc_time = row.timestamp_utc if "timestamp_utc" in row else "N/A"
+        popup_text = f"""
+        <b>Satellite Detection</b><br>
+        UTC Time: {utc_time}<br>
+        Confidence: {conf}<br>
+        Brightness: {row.bright_ti4} K<br>
+        FRP: {row.frp} MW
+        """
         folium.CircleMarker(
             location=[row.latitude, row.longitude],
             radius=4 + (row.frp / 10 if not pd.isna(row.frp) else 3),
             color=color_by_conf(conf),
             fill=True,
             fill_opacity=0.75,
-            popup=f"""
-            <b>Satellite Detection</b><br>
-            UTC Time: {row.timestamp_utc}<br>
-            Confidence: {conf}<br>
-            Brightness: {row.bright_ti4} K<br>
-            FRP: {row.frp} MW
-            """
+            popup=popup_text
         ).add_to(m)
 
     folium_static(m, width=1200, height=500)
@@ -216,11 +220,12 @@ else:
     )
 
     def anomaly_context(row):
+        utc_time = row.timestamp_utc if "timestamp_utc" in row else "N/A"
         return f"""
 Satellite observation:
 Latitude: {row.latitude}
 Longitude: {row.longitude}
-UTC Time: {row.timestamp_utc}
+UTC Time: {utc_time}
 Brightness: {row.bright_ti4} K
 Radiative Power: {row.frp} MW
 """
