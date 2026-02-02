@@ -199,6 +199,9 @@ OUTPUT REQUIREMENTS
 - No code blocks or backticks
 - No explanations or commentary
 - No trailing text
+- Do NOT include <think> tags or any reasoning process
+- Do NOT show your internal thought process
+- Respond with ONLY the JSON object
 
 JSON STRUCTURE:
 {
