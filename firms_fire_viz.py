@@ -160,17 +160,7 @@ if df is not None and not df.empty:
 """,
             max_width=300
         )
-
-        folium.CircleMarker(
-            location=[row.latitude, row.longitude],
-            radius=radius,
-            color=color,
-            fill=True,
-            fill_opacity=0.75,
-            popup=popup
-        ).add_to(m)
-
-    folium_static(m, width=1200, height=550)
+    folium_static(m, width=1200, height=420)
 
     with st.expander("ℹ️ Column Meanings"):
         st.markdown(
@@ -183,9 +173,9 @@ if df is not None and not df.empty:
 """
         )
 
+    st.divider()
     st.subheader("📋 Satellite Detection Table")
 
-    # Select only columns that exist to avoid KeyErrors
     table_columns = [
         "latitude",
         "longitude",
@@ -201,6 +191,7 @@ if df is not None and not df.empty:
         use_container_width=True,
         height=350
     )
+
 
 
 # =========================
