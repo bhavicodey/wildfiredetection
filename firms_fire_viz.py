@@ -169,8 +169,8 @@ else:
         df.index[:50]
     )
 
-    def anomaly_context(row):
-        return f"""
+def anomaly_context(row):
+    return f"""
 Satellite observation detected:
 Latitude: {row.latitude}
 Longitude: {row.longitude}
@@ -217,22 +217,26 @@ JSON STRUCTURE:
 }
 """
 
-    if st.button("⚡ Generate Tactical Action Plan"):
-        with st.spinner("⚡ Cerebras computing strategy…"):
-            response = client.chat.completions.create(
-                model="qwen-3-32b",
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": anomaly_context(df.loc[fire_idx])}
-                ],
-                max_completion_tokens=350,
-                temperature=0.1
-            )
+if st.button("⚡ Generate Tactical Action Plan"):
+    with st.spinner("⚡ Cerebras computing strategy…"):
+        response = client.chat.completions.create(
+            model="qwen-3-32b",
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": anomaly_context(df.loc[fire_idx])}
+            ],
+            max_completion_tokens=350,
+            temperature=0.1
+        )
+    st.success("Tactical plan generated")
+    st.markdown("### 📡 Tactical Action Plan (JSON)")
+    st.code(response.choices[0].message.content, language="json")
 
-        st.success("Tactical plan generated")
-        st.markdown("### 📡 Tactical Action Plan (JSON)")
-        st.code(response.choices[0].message.content, language="json")
-
+# =========================
+# Footer
+# =========================
+st.markdown("---")
+st.caption("Cerebras Wafer-Scale Engine — Real-time strategic reasoning on live satellite data")
 # =========================
 # Footer
 # =========================
