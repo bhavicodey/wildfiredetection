@@ -228,6 +228,7 @@ Your task is to instantly reason over:
 • Immediate operational response
 
 Output a concise tactical plan suitable for human operators.
+Always end with a complete final recommendation section. Do not cut off mid-sentence.
 """
 
     if st.button("⚡ Generate Tactical Action Plan"):
@@ -238,7 +239,7 @@ Output a concise tactical plan suitable for human operators.
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": anomaly_context(df.loc[fire_idx])}
                 ],
-                max_completion_tokens=350,
+                max_completion_tokens=500,
                 temperature=0.1
             )
 
