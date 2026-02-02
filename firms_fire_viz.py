@@ -79,6 +79,27 @@ firms_api_key = "7a8749d24a541283600ded9b708c220c"
 cerebras_api_key = "csk-y2vf6htw5pp3vhwy63x5j2684yn6r2vwykffke4534tdpfyk"
 
 # =========================
+# Helpers
+# =========================
+def normalize_confidence(conf):
+    if pd.isna(conf):
+        return 50
+    if isinstance(conf, str):
+        return {"l": 30, "n": 60, "h": 90}.get(conf.lower(), 50)
+    try:
+        return float(conf)
+    except:
+        return 50
+
+def color_by_conf(conf):
+    conf = normalize_confidence(conf)
+    if conf >= 80:
+        return "red"
+    elif conf >= 50:
+        return "orange"
+    return "yellow"
+
+# =========================
 # FIRMS Fetch
 # =========================
 @st.cache_data(ttl=300)
@@ -109,7 +130,7 @@ if st.sidebar.button("🔍 Fetch Fire Data"):
             st.error("Invalid bounding box or no detections returned.")
             st.stop()
 
-        # Time formatting
+        # Format UTC timestamp
         df["timestamp_utc"] = pd.to_datetime(
             df["acq_date"] + " " + df["acq_time"].astype(str).str.zfill(4),
             format="%Y-%m-%d %H%M",
@@ -128,28 +149,24 @@ df = st.session_state.df
 if df is not None and not df.empty:
     st.subheader("🗺️ Satellite Detection Map")
 
-    center_lat = df.latitude.mean()
-    center_lon = df.longitude.mean()
+    center_lat = df.latitude.astype(float).mean()
+    center_lon = df.longitude.astype(float).mean()
 
     m = folium.Map(location=[center_lat, center_lon], zoom_start=6)
 
-    def color_by_conf(conf):
-        if conf >= 80:
-            return "red"
-        elif conf >= 50:
-            return "orange"
-        return "yellow"
-
     for idx, row in df.iterrows():
+        conf = normalize_confidence(row.get("confidence", 50))
+
         folium.CircleMarker(
             location=[row.latitude, row.longitude],
-            radius=3 + (row.frp / 10 if not pd.isna(row.frp) else 3),
-            color=color_by_conf(row.confidence if "confidence" in row else 50),
+            radius=4 + (row.frp / 10 if not pd.isna(row.frp) else 3),
+            color=color_by_conf(conf),
             fill=True,
             fill_opacity=0.75,
             popup=f"""
             <b>Satellite Detection</b><br>
             UTC Time: {row.timestamp_utc}<br>
+            Confidence: {conf}<br>
             Brightness: {row.bright_ti4} K<br>
             FRP: {row.frp} MW
             """
@@ -158,18 +175,19 @@ if df is not None and not df.empty:
     folium_static(m, width=1200, height=500)
 
     # =========================
-    # Table (Expandable)
+    # Table
     # =========================
     with st.expander("📊 View Raw Detection Table & Column Meanings"):
         st.markdown("""
 **Column Guide**
-- **latitude / longitude**: Detection coordinates
-- **timestamp_utc**: Acquisition time (UTC)
-- **bright_ti4**: Thermal brightness (Kelvin)
-- **frp**: Fire Radiative Power (MW) — intensity proxy
+- **latitude / longitude**: Detection coordinates  
+- **timestamp_utc**: Acquisition time (UTC)  
+- **bright_ti4**: Thermal brightness (Kelvin)  
+- **frp**: Fire Radiative Power (MW) — intensity proxy  
+- **confidence**: Detection reliability  
 """)
         st.dataframe(
-            df[["latitude", "longitude", "timestamp_utc", "bright_ti4", "frp"]],
+            df[["latitude", "longitude", "timestamp_utc", "bright_ti4", "frp", "confidence"]],
             use_container_width=True
         )
 
@@ -180,8 +198,8 @@ st.subheader("🧠 Cerebras Tactical Reasoning Engine")
 
 st.caption(
 """
-Cerebras performs **multi-layer validation and planning** instantly:
-historical context → infrastructure risk → predictive spread → jurisdiction → response assets.
+Cerebras performs **instant multi-layer reasoning**:
+historical context → infrastructure exposure → predictive spread → jurisdiction → response assets.
 """
 )
 
@@ -209,7 +227,7 @@ Radiative Power: {row.frp} MW
 
     SYSTEM_PROMPT = """
 You are the Planetary Operations Core — a strategic AI for time-critical satellite anomalies.
-Instantly validate risk, jurisdiction, infrastructure exposure, and recommend actions.
+Instantly validate risk, infrastructure exposure, jurisdiction, and recommend actions.
 Respond concisely and operationally.
 """
 
@@ -221,7 +239,7 @@ Respond concisely and operationally.
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": anomaly_context(df.loc[fire_idx])}
                 ],
-                max_completion_tokens=400,
+                max_completion_tokens=500,
                 temperature=0.1
             )
 
@@ -230,11 +248,11 @@ Respond concisely and operationally.
         st.text_area(
             "📡 Cerebras Tactical Output",
             response.choices[0].message.content,
-            height=400
+            height=450
         )
 
 # =========================
 # Footer
 # =========================
 st.markdown("---")
-st.caption("Cerebras Wafer-Scale Engine — Real-time reasoning on live satellite data")
+st.caption("Cerebras Wafer-Scale Engine — Real-time strategic reasoning on live satellite data")
