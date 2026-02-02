@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from io import StringIO
 
 # =========================
-# Cerebras
+# Cerebras SDK
 # =========================
 try:
     from cerebras.cloud.sdk import Cerebras
@@ -27,24 +27,22 @@ st.title("🌍 Planetary Operations Core")
 st.caption("Satellite Anomaly Detection × Cerebras Wafer-Scale Inference")
 
 # =========================
-# How to Run
+# How to Run Box
 # =========================
 st.info(
 """
 ### ▶️ How to Run This Demo
 
-This system combines **live satellite detections** with **ultra-low-latency Cerebras reasoning**.
+This demo combines **live satellite anomaly detections** with **ultra-low-latency Cerebras reasoning**.
 
-**No setup required — API keys are preloaded.**
+**All API keys are preconfigured — no setup required.**
 
-**Steps**
-1. Choose a date range & bounding box (or keep defaults)
-2. Click **🔍 Fetch Fire Data**
-3. Click a detection on the map or select one below
-4. Click **⚡ Generate Tactical Action Plan**
+**Steps:**
+1. Adjust the **date range** and **bounding box** (or keep defaults)
+2. Click **🔍 Fetch Fire Data** to load satellite detections
+3. Select an anomaly and click **⚡ Generate Tactical Action Plan**
 
-🧠 **Cerebras’ role:**  
-Instantly transforms raw satellite signals into **validated, jurisdiction-aware response recommendations** — in seconds, not hours.
+⚡ Cerebras enables **real-time multi-layer reasoning** on raw satellite data — eliminating traditional processing delays.
 """
 )
 
@@ -73,31 +71,10 @@ satellite = st.sidebar.selectbox(
 )
 
 # =========================
-# API Keys (Preloaded)
+# API Keys
 # =========================
 firms_api_key = "7a8749d24a541283600ded9b708c220c"
 cerebras_api_key = "csk-y2vf6htw5pp3vhwy63x5j2684yn6r2vwykffke4534tdpfyk"
-
-# =========================
-# Helpers
-# =========================
-def normalize_confidence(conf):
-    if pd.isna(conf):
-        return 50
-    if isinstance(conf, str):
-        return {"l": 30, "n": 60, "h": 90}.get(conf.lower(), 50)
-    try:
-        return float(conf)
-    except:
-        return 50
-
-def color_by_conf(conf):
-    conf = normalize_confidence(conf)
-    if conf >= 80:
-        return "red"
-    elif conf >= 50:
-        return "orange"
-    return "yellow"
 
 # =========================
 # FIRMS Fetch
@@ -107,8 +84,7 @@ def fetch_firms(api_key, source, area, start_date, days):
     url = f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{api_key}/{source}/{area}/{days}/{start_date}"
     r = requests.get(url, timeout=30)
     r.raise_for_status()
-    df = pd.read_csv(StringIO(r.text))
-    return df
+    return pd.read_csv(StringIO(r.text))
 
 # =========================
 # Fetch Button
@@ -117,79 +93,58 @@ if st.sidebar.button("🔍 Fetch Fire Data"):
     with st.spinner("Fetching satellite detections…"):
         area = f"{min_lon},{min_lat},{max_lon},{max_lat}"
         days = (end_date - start_date).days + 1
-
-        df = fetch_firms(
-            firms_api_key,
-            satellite,
-            area,
-            start_date.strftime("%Y-%m-%d"),
-            days
-        )
-
-        if "latitude" not in df.columns or "longitude" not in df.columns:
-            st.error("Invalid bounding box or no detections returned.")
-            st.stop()
-
-        # Format UTC timestamp
-        df["timestamp_utc"] = pd.to_datetime(
-            df["acq_date"] + " " + df["acq_time"].astype(str).str.zfill(4),
-            format="%Y-%m-%d %H%M",
-            utc=True
-        )
-
+        df = fetch_firms(firms_api_key, satellite, area, start_date.strftime("%Y-%m-%d"), days)
         st.session_state.df = df
-
     st.success(f"Loaded {len(df)} satellite detections")
 
 # =========================
-# Display Data
+# Display Map + Table
 # =========================
 df = st.session_state.df
-
 if df is not None and not df.empty:
     st.subheader("🗺️ Satellite Detection Map")
 
-    center_lat = df.latitude.astype(float).mean()
-    center_lon = df.longitude.astype(float).mean()
+    if "latitude" not in df.columns or "longitude" not in df.columns:
+        st.error(f"Expected latitude/longitude columns not found. Columns: {list(df.columns)}")
+        st.stop()
 
+    center_lat = df["latitude"].astype(float).mean()
+    center_lon = df["longitude"].astype(float).mean()
+    
     m = folium.Map(location=[center_lat, center_lon], zoom_start=6)
 
-    for idx, row in df.iterrows():
-        conf = normalize_confidence(row.get("confidence", 50))
+    # Color by confidence
+    def color_by_conf(conf):
+        try:
+            conf = float(conf)
+            if conf >= 80: return "red"
+            elif conf >= 50: return "orange"
+            else: return "yellow"
+        except:
+            return "yellow"
 
+    for _, row in df.head(2000).iterrows():
+        popup_text = (
+            f"Date: {row.get('acq_date','N/A')}<br>"
+            f"Time (UTC): {row.get('acq_time','N/A')}<br>"
+            f"Brightness: {row.get('bright_ti4','N/A')} K<br>"
+            f"FRP: {row.get('frp','N/A')} MW<br>"
+            f"Confidence: {row.get('confidence',50)}"
+        )
         folium.CircleMarker(
             location=[row.latitude, row.longitude],
-            radius=4 + (row.frp / 10 if not pd.isna(row.frp) else 3),
-            color=color_by_conf(conf),
+            radius=6,
+            color=color_by_conf(row.get("confidence", 50)),
             fill=True,
-            fill_opacity=0.75,
-            popup=f"""
-            <b>Satellite Detection</b><br>
-            UTC Time: {row.timestamp_utc}<br>
-            Confidence: {conf}<br>
-            Brightness: {row.bright_ti4} K<br>
-            FRP: {row.frp} MW
-            """
+            fill_color=color_by_conf(row.get("confidence", 50)),
+            fill_opacity=0.7,
+            popup=folium.Popup(popup_text, max_width=300)
         ).add_to(m)
 
     folium_static(m, width=1200, height=500)
 
-    # =========================
-    # Table
-    # =========================
-    with st.expander("📊 View Raw Detection Table & Column Meanings"):
-        st.markdown("""
-**Column Guide**
-- **latitude / longitude**: Detection coordinates  
-- **timestamp_utc**: Acquisition time (UTC)  
-- **bright_ti4**: Thermal brightness (Kelvin)  
-- **frp**: Fire Radiative Power (MW) — intensity proxy  
-- **confidence**: Detection reliability  
-""")
-        st.dataframe(
-            df[["latitude", "longitude", "timestamp_utc", "bright_ti4", "frp", "confidence"]],
-            use_container_width=True
-        )
+    st.subheader("📊 Detection Table")
+    st.dataframe(df.head(100), use_container_width=True)
 
 # =========================
 # Cerebras Analysis
@@ -197,10 +152,7 @@ if df is not None and not df.empty:
 st.subheader("🧠 Cerebras Tactical Reasoning Engine")
 
 st.caption(
-"""
-Cerebras performs **instant multi-layer reasoning**:
-historical context → infrastructure exposure → predictive spread → jurisdiction → response assets.
-"""
+    "Cerebras performs instant multi-layer reasoning: historical context → infrastructure exposure → predictive spread → jurisdiction → response assets."
 )
 
 if not CEREBRAS_AVAILABLE:
@@ -218,17 +170,29 @@ else:
     def anomaly_context(row):
         return f"""
 Satellite observation:
-Latitude: {row.latitude}
-Longitude: {row.longitude}
-UTC Time: {row.timestamp_utc}
-Brightness: {row.bright_ti4} K
-Radiative Power: {row.frp} MW
+- Latitude: {row.latitude}
+- Longitude: {row.longitude}
+- UTC Time: {row.get('acq_date','N/A')} {row.get('acq_time','N/A')}
+- Brightness: {row.get('bright_ti4','N/A')} K
+- Radiative Power: {row.get('frp','N/A')} MW
 """
 
     SYSTEM_PROMPT = """
-You are the Planetary Operations Core — a strategic AI for time-critical satellite anomalies.
-Instantly validate risk, infrastructure exposure, jurisdiction, and recommend actions.
-Respond concisely and operationally.
+You are the Planetary Operations Core, a high-frequency strategic AI designed to protect critical infrastructure and human life.
+
+INPUT FORMAT:
+Satellite anomaly data with coordinates, thermal readings, and confidence signals.
+
+ANALYSIS FRAMEWORK:
+Evaluate these factors internally:
+1. Historical & contextual verification
+2. Geospatial infrastructure scan (5km radius)
+3. Predictive threat modeling (T+1 to T+6 hours)
+4. Jurisdiction & response asset availability
+
+CRITICAL OUTPUT RULES:
+Be concise and operational.
+Return a **textual risk assessment** in markdown, no JSON or code blocks.
 """
 
     if st.button("⚡ Generate Tactical Action Plan"):
@@ -242,14 +206,9 @@ Respond concisely and operationally.
                 max_completion_tokens=500,
                 temperature=0.1
             )
-
         st.success("Tactical plan generated")
-
-        st.text_area(
-            "📡 Cerebras Tactical Output",
-            response.choices[0].message.content,
-            height=450
-        )
+        st.markdown("### 🔥 Risk Assessment")
+        st.markdown(response.choices[0].message.content)
 
 # =========================
 # Footer
