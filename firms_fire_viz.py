@@ -222,7 +222,7 @@ JSON FORMAT:
     if st.button("⚡ Generate Tactical Action Plan"):
         with st.spinner("⚡ Cerebras computing strategy…"):
             response = client.chat.completions.create(
-                model="llama-3.1-8b",
+                model="qwen-3-32b",
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": anomaly_context(df.loc[fire_idx])}
