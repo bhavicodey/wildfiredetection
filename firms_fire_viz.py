@@ -180,7 +180,7 @@ Thermal Brightness: {row.bright_ti4}
 Radiative Power: {row.frp}
 """
 
-  SYSTEM_PROMPT = """
+SYSTEM_PROMPT = """
 You are the Planetary Operations Core, a high-frequency strategic AI designed to protect critical infrastructure and human life.
 
 INPUT
