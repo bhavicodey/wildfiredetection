@@ -240,8 +240,4 @@ if st.button("⚡ Generate Tactical Action Plan"):
 # =========================
 st.markdown("---")
 st.caption("Cerebras Wafer-Scale Engine — Real-time strategic reasoning on live satellite data")
-# =========================
-# Footer
-# =========================
-st.markdown("---")
-st.caption("Cerebras Wafer-Scale Engine — Real-time strategic reasoning on live satellite data")
+
