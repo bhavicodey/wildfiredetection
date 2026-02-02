@@ -127,8 +127,8 @@ if df is not None and not df.empty:
     st.subheader("🗺️ Satellite Detection Map")
 
     if "latitude" not in df.columns or "longitude" not in df.columns:
-    st.error(f"Expected latitude/longitude columns not found. Columns: {list(df.columns)}")
-    st.stop()
+        st.error(f"Expected latitude/longitude columns not found. Columns: {list(df.columns)}")
+        st.stop()
 
     center_lat = df["latitude"].astype(float).mean()
     center_lon = df["longitude"].astype(float).mean()
