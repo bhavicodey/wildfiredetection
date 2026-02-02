@@ -183,6 +183,26 @@ if df is not None and not df.empty:
 """
         )
 
+    st.subheader("📋 Satellite Detection Table")
+
+    # Select only columns that exist to avoid KeyErrors
+    table_columns = [
+        "latitude",
+        "longitude",
+        "timestamp_utc",
+        "bright_ti4",
+        "frp",
+        "confidence"
+    ]
+    existing_columns = [c for c in table_columns if c in df.columns]
+
+    st.dataframe(
+        df[existing_columns].sort_values("frp", ascending=False),
+        use_container_width=True,
+        height=350
+    )
+
+
 # =========================
 # Cerebras Tactical Reasoning
 # =========================
