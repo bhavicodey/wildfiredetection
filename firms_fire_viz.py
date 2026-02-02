@@ -131,4 +131,126 @@ if st.sidebar.button("🔍 Fetch Satellite Detections"):
 # =========================
 df = st.session_state.df
 
-if df
+if df is not None and not df.empty:
+    st.subheader("🗺️ Interactive Satellite Detection Map")
+
+    center_lat = df["latitude"].mean()
+    center_lon = df["longitude"].mean()
+
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=6)
+
+    for idx, row in df.iterrows():
+        color = "green" if row.frp < 10 else "orange" if row.frp < 50 else "red"
+        radius = min(12, max(4, row.frp / 5))
+
+        popup = folium.Popup(
+            f"""
+<b>ID:</b> {idx}<br>
+<b>Lat/Lon:</b> {row.latitude}, {row.longitude}<br>
+<b>Time:</b> {row.timestamp_utc}<br>
+<b>FRP:</b> {row.frp}<br>
+<b>Brightness:</b> {row.bright_ti4}<br>
+<b>Note:</b> Possible false positives near landfills or solar facilities
+""",
+            max_width=300
+        )
+
+        # ✅ THIS IS THE FIX — marker added to map
+        folium.CircleMarker(
+            location=[row.latitude, row.longitude],
+            radius=radius,
+            color=color,
+            fill=True,
+            fill_opacity=0.75,
+            popup=popup
+        ).add_to(m)
+
+    folium_static(m, width=1200, height=420)
+
+    with st.expander("ℹ️ Column Meanings"):
+        st.markdown(
+            """
+- **latitude / longitude** — Satellite-detected anomaly location  
+- **acq_date / acq_time** — Acquisition time (UTC)  
+- **bright_ti4** — Thermal brightness (Kelvin)  
+- **frp** — Fire Radiative Power (proxy for intensity)  
+- **Lower FRP ≠ safe** — context matters (location, infrastructure, wind)
+"""
+        )
+
+    st.divider()
+    st.subheader("📋 Satellite Detection Table")
+
+    table_columns = [
+        "latitude",
+        "longitude",
+        "timestamp_utc",
+        "bright_ti4",
+        "frp",
+        "confidence"
+    ]
+    existing_columns = [c for c in table_columns if c in df.columns]
+
+    st.dataframe(
+        df[existing_columns].sort_values("frp", ascending=False),
+        use_container_width=True,
+        height=350
+    )
+
+# =========================
+# Cerebras Tactical Reasoning
+# =========================
+st.subheader("🧠 Cerebras Tactical Reasoning Engine")
+
+if df is not None and not df.empty and CEREBRAS_AVAILABLE:
+    client = Cerebras(api_key=cerebras_api_key)
+
+    fire_idx = st.selectbox(
+        "Select anomaly ID (map + table aligned)",
+        df.index.tolist()
+    )
+
+    def anomaly_context(row):
+        return f"""
+Satellite anomaly detected:
+Latitude: {row.latitude}
+Longitude: {row.longitude}
+Timestamp (UTC): {row.timestamp_utc}
+Thermal Brightness: {row.bright_ti4}
+Radiative Power: {row.frp}
+"""
+
+    SYSTEM_PROMPT = """
+You are the Planetary Operations Core — a real-time strategic AI for satellite anomaly response.
+
+Your task is to instantly reason over:
+• Geospatial context
+• Infrastructure proximity
+• Jurisdictional authority
+• Likelihood of false positives
+• Immediate operational response
+
+Always end with a complete final recommendation.
+"""
+
+    if st.button("⚡ Generate Tactical Action Plan"):
+        with st.spinner("⚡ Cerebras reasoning in real time…"):
+            response = client.chat.completions.create(
+                model="llama-3.1-8b",
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": anomaly_context(df.loc[fire_idx])}
+                ],
+                max_completion_tokens=500,
+                temperature=0.1
+            )
+
+        st.success("Tactical plan generated")
+        st.markdown("### 📡 Tactical Assessment")
+        st.markdown(response.choices[0].message.content)
+
+# =========================
+# Footer
+# =========================
+st.markdown("---")
+st.caption("Cerebras Wafer-Scale Engine — Turning satellite pixels into decisions, instantly")
