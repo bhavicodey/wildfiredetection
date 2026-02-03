@@ -5,8 +5,6 @@ import folium
 from streamlit_folium import folium_static
 from datetime import datetime, timedelta
 from io import StringIO
-import time
-import threading
 
 # =========================
 # Cerebras
@@ -209,7 +207,7 @@ if df is not None and not df.empty:
     )
 
 # =========================
-# Cerebras Tactical Reasoning with Animated Acres
+# Cerebras Tactical Reasoning
 # =========================
 st.subheader("🧠 Cerebras Tactical Reasoning Engine")
 
@@ -245,45 +243,20 @@ Always end with a complete final recommendation.
 """
 
     if st.button("⚡ Generate Tactical Action Plan"):
-        # Placeholders
-        burned_placeholder = st.empty()
-        bar_placeholder = st.empty()
-        result_placeholder = st.empty()
+        with st.spinner("⚡ Cerebras reasoning in real time…"):
+            response = client.chat.completions.create(
+                model="llama-3.1-8b",
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": anomaly_context(df.loc[fire_idx])}
+                ],
+                max_completion_tokens=500,
+                temperature=0.1
+            )
 
-        stop_flag = threading.Event()
-
-        # Animation thread
-        def animate_acres():
-            start_time = time.time()
-            while not stop_flag.is_set():
-                elapsed = time.time() - start_time
-                acres = int(elapsed * 2)  # 2 acres per second
-                burned_placeholder.markdown(f"🔥 Acres burning while reasoning: **{acres}**")
-                bar_placeholder.progress(min(acres / 1000, 1.0))  # scale to 1000 acres max
-                time.sleep(0.2)
-
-        thread = threading.Thread(target=animate_acres)
-        thread.start()
-
-        # Cerebras call (main thread)
-        response = client.chat.completions.create(
-            model="llama-3.1-8b",
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": anomaly_context(df.loc[fire_idx])}
-            ],
-            max_completion_tokens=500,
-            temperature=0.1
-        )
-
-        # Stop animation
-        stop_flag.set()
-        thread.join()
-
-        burned_placeholder.markdown(f"🔥 Final acres burned during processing: **{int((time.time()-start_time)*2)}**")
-        bar_placeholder.progress(1.0)
-        result_placeholder.markdown("### 📡 Tactical Assessment")
-        result_placeholder.markdown(response.choices[0].message.content)
+        st.success("Tactical plan generated")
+        st.markdown("### 📡 Tactical Assessment")
+        st.markdown(response.choices[0].message.content)
 
 # =========================
 # Footer
