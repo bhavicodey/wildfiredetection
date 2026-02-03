@@ -56,8 +56,6 @@ st.info(
 2. Click **🔍 Fetch Satellite Detections**
 3. Click a point on the map or select it below
 4. Click **⚡ Generate Tactical Action Plan**
-
-All API keys are preconfigured.
 """
 )
 
@@ -117,10 +115,23 @@ if st.sidebar.button("🔍 Fetch Satellite Detections"):
             days
         )
 
-        # UTC timestamp formatting
-        df["acq_time_utc"] = df["acq_time"].astype(str).str.zfill(4)
-        df["acq_time_utc"] = df["acq_time_utc"].str[:2] + ":" + df["acq_time_utc"].str[2:]
-        df["timestamp_utc"] = df["acq_date"] + " " + df["acq_time_utc"] + " UTC"
+        # =========================
+        # ✅ ROBUST UTC TIMESTAMP HANDLING
+        # =========================
+        if "acq_date" in df.columns and "acq_time" in df.columns:
+            df["acq_time_utc"] = df["acq_time"].astype(str).str.zfill(4)
+            df["acq_time_utc"] = (
+                df["acq_time_utc"].str[:2] + ":" + df["acq_time_utc"].str[2:]
+            )
+            df["timestamp_utc"] = df["acq_date"] + " " + df["acq_time_utc"] + " UTC"
+
+        elif "acq_date" in df.columns:
+            # Some FIRMS products have date only
+            df["timestamp_utc"] = df["acq_date"] + " 00:00 UTC"
+
+        else:
+            # Absolute fallback (rare)
+            df["timestamp_utc"] = "Unknown UTC"
 
         st.session_state.df = df
 
@@ -155,7 +166,6 @@ if df is not None and not df.empty:
             max_width=300
         )
 
-        # ✅ THIS IS THE FIX — marker added to map
         folium.CircleMarker(
             location=[row.latitude, row.longitude],
             radius=radius,
@@ -166,17 +176,6 @@ if df is not None and not df.empty:
         ).add_to(m)
 
     folium_static(m, width=1200, height=420)
-
-    with st.expander("ℹ️ Column Meanings"):
-        st.markdown(
-            """
-- **latitude / longitude** — Satellite-detected anomaly location  
-- **acq_date / acq_time** — Acquisition time (UTC)  
-- **bright_ti4** — Thermal brightness (Kelvin)  
-- **frp** — Fire Radiative Power (proxy for intensity)  
-- **Lower FRP ≠ safe** — context matters (location, infrastructure, wind)
-"""
-        )
 
     st.divider()
     st.subheader("📋 Satellite Detection Table")
