@@ -56,6 +56,8 @@ st.info(
 2. Click **🔍 Fetch Satellite Detections**
 3. Click a point on the map or select it below
 4. Click **⚡ Generate Tactical Action Plan**
+
+All API keys are preconfigured.
 """
 )
 
@@ -71,6 +73,16 @@ if "df" not in st.session_state:
 st.sidebar.header("📅 Date Range")
 start_date = st.sidebar.date_input("Start Date", datetime.utcnow() - timedelta(days=3))
 end_date = st.sidebar.date_input("End Date", datetime.utcnow())
+
+# =========================
+# Enforce 5-day FIRMS API limit
+# =========================
+max_days = 5
+selected_days = (end_date - start_date).days + 1
+if selected_days > max_days:
+    st.sidebar.warning(f"FIRMS API allows a maximum of {max_days} days. End date adjusted automatically.")
+    end_date = start_date + timedelta(days=max_days - 1)
+    selected_days = max_days
 
 st.sidebar.header("📍 Bounding Box")
 min_lat = st.sidebar.number_input("Min Latitude", value=34.0)
@@ -105,33 +117,20 @@ def fetch_firms(api_key, source, area, start_date, days):
 if st.sidebar.button("🔍 Fetch Satellite Detections"):
     with st.spinner("Fetching satellite detections…"):
         area = f"{min_lon},{min_lat},{max_lon},{max_lat}"
-        days = (end_date - start_date).days + 1
 
         df = fetch_firms(
             firms_api_key,
             satellite,
             area,
             start_date.strftime("%Y-%m-%d"),
-            days
+            selected_days
         )
 
-        # =========================
-        # ✅ ROBUST UTC TIMESTAMP HANDLING
-        # =========================
-        if "acq_date" in df.columns and "acq_time" in df.columns:
+        # UTC timestamp formatting
+        if "acq_time" in df.columns and "acq_date" in df.columns:
             df["acq_time_utc"] = df["acq_time"].astype(str).str.zfill(4)
-            df["acq_time_utc"] = (
-                df["acq_time_utc"].str[:2] + ":" + df["acq_time_utc"].str[2:]
-            )
+            df["acq_time_utc"] = df["acq_time_utc"].str[:2] + ":" + df["acq_time_utc"].str[2:]
             df["timestamp_utc"] = df["acq_date"] + " " + df["acq_time_utc"] + " UTC"
-
-        elif "acq_date" in df.columns:
-            # Some FIRMS products have date only
-            df["timestamp_utc"] = df["acq_date"] + " 00:00 UTC"
-
-        else:
-            # Absolute fallback (rare)
-            df["timestamp_utc"] = "Unknown UTC"
 
         st.session_state.df = df
 
@@ -176,6 +175,17 @@ if df is not None and not df.empty:
         ).add_to(m)
 
     folium_static(m, width=1200, height=420)
+
+    with st.expander("ℹ️ Column Meanings"):
+        st.markdown(
+            """
+- **latitude / longitude** — Satellite-detected anomaly location  
+- **acq_date / acq_time** — Acquisition time (UTC)  
+- **bright_ti4** — Thermal brightness (Kelvin)  
+- **frp** — Fire Radiative Power (proxy for intensity)  
+- **Lower FRP ≠ safe** — context matters (location, infrastructure, wind)
+"""
+        )
 
     st.divider()
     st.subheader("📋 Satellite Detection Table")
