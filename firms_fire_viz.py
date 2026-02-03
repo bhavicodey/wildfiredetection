@@ -74,16 +74,6 @@ st.sidebar.header("📅 Date Range")
 start_date = st.sidebar.date_input("Start Date", datetime.utcnow() - timedelta(days=3))
 end_date = st.sidebar.date_input("End Date", datetime.utcnow())
 
-# =========================
-# Enforce 5-day FIRMS API limit
-# =========================
-max_days = 5
-selected_days = (end_date - start_date).days + 1
-if selected_days > max_days:
-    st.sidebar.warning(f"FIRMS API allows a maximum of {max_days} days. End date adjusted automatically.")
-    end_date = start_date + timedelta(days=max_days - 1)
-    selected_days = max_days
-
 st.sidebar.header("📍 Bounding Box")
 min_lat = st.sidebar.number_input("Min Latitude", value=34.0)
 min_lon = st.sidebar.number_input("Min Longitude", value=-120.0)
@@ -116,17 +106,27 @@ def fetch_firms(api_key, source, area, start_date, days):
 # =========================
 if st.sidebar.button("🔍 Fetch Satellite Detections"):
     with st.spinner("Fetching satellite detections…"):
-        area = f"{min_lon},{min_lat},{max_lon},{max_lat}"
+        delta = end_date - start_date
+        dfs = []
 
-        df = fetch_firms(
-            firms_api_key,
-            satellite,
-            area,
-            start_date.strftime("%Y-%m-%d"),
-            selected_days
-        )
+        for i in range(0, delta.days + 1, 5):
+            chunk_start = start_date + timedelta(days=i)
+            chunk_end = min(start_date + timedelta(days=i+4), end_date)
+            chunk_days = (chunk_end - chunk_start).days + 1
 
-        # UTC timestamp formatting
+            area = f"{min_lon},{min_lat},{max_lon},{max_lat}"
+            df_chunk = fetch_firms(
+                firms_api_key,
+                satellite,
+                area,
+                chunk_start.strftime("%Y-%m-%d"),
+                chunk_days
+            )
+            dfs.append(df_chunk)
+
+        df = pd.concat(dfs, ignore_index=True)
+
+        # UTC timestamp formatting (handle missing columns gracefully)
         if "acq_time" in df.columns and "acq_date" in df.columns:
             df["acq_time_utc"] = df["acq_time"].astype(str).str.zfill(4)
             df["acq_time_utc"] = df["acq_time_utc"].str[:2] + ":" + df["acq_time_utc"].str[2:]
@@ -157,7 +157,7 @@ if df is not None and not df.empty:
             f"""
 <b>ID:</b> {idx}<br>
 <b>Lat/Lon:</b> {row.latitude}, {row.longitude}<br>
-<b>Time:</b> {row.timestamp_utc}<br>
+<b>Time:</b> {row.get('timestamp_utc', 'N/A')}<br>
 <b>FRP:</b> {row.frp}<br>
 <b>Brightness:</b> {row.bright_ti4}<br>
 <b>Note:</b> Possible false positives near landfills or solar facilities
@@ -224,7 +224,7 @@ if df is not None and not df.empty and CEREBRAS_AVAILABLE:
 Satellite anomaly detected:
 Latitude: {row.latitude}
 Longitude: {row.longitude}
-Timestamp (UTC): {row.timestamp_utc}
+Timestamp (UTC): {row.get('timestamp_utc', 'N/A')}
 Thermal Brightness: {row.bright_ti4}
 Radiative Power: {row.frp}
 """
