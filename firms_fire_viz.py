@@ -5,6 +5,7 @@ import folium
 from streamlit_folium import folium_static
 from datetime import datetime, timedelta
 from io import StringIO
+import time  # For real-time counter
 
 # =========================
 # Cerebras
@@ -106,27 +107,23 @@ def fetch_firms(api_key, source, area, start_date, days):
 # =========================
 if st.sidebar.button("🔍 Fetch Satellite Detections"):
     with st.spinner("Fetching satellite detections…"):
-        delta = end_date - start_date
-        dfs = []
+        area = f"{min_lon},{min_lat},{max_lon},{max_lat}"
+        days = (end_date - start_date).days + 1
 
-        for i in range(0, delta.days + 1, 5):
-            chunk_start = start_date + timedelta(days=i)
-            chunk_end = min(start_date + timedelta(days=i+4), end_date)
-            chunk_days = (chunk_end - chunk_start).days + 1
+        # Limit days to 5 per API restrictions
+        if days > 5:
+            st.warning("NASA FIRMS API only allows 5-day segments. Using last 5 days.")
+            days = 5
 
-            area = f"{min_lon},{min_lat},{max_lon},{max_lat}"
-            df_chunk = fetch_firms(
-                firms_api_key,
-                satellite,
-                area,
-                chunk_start.strftime("%Y-%m-%d"),
-                chunk_days
-            )
-            dfs.append(df_chunk)
+        df = fetch_firms(
+            firms_api_key,
+            satellite,
+            area,
+            start_date.strftime("%Y-%m-%d"),
+            days
+        )
 
-        df = pd.concat(dfs, ignore_index=True)
-
-        # UTC timestamp formatting (handle missing columns gracefully)
+        # UTC timestamp formatting
         if "acq_time" in df.columns and "acq_date" in df.columns:
             df["acq_time_utc"] = df["acq_time"].astype(str).str.zfill(4)
             df["acq_time_utc"] = df["acq_time_utc"].str[:2] + ":" + df["acq_time_utc"].str[2:]
@@ -157,7 +154,7 @@ if df is not None and not df.empty:
             f"""
 <b>ID:</b> {idx}<br>
 <b>Lat/Lon:</b> {row.latitude}, {row.longitude}<br>
-<b>Time:</b> {row.get('timestamp_utc', 'N/A')}<br>
+<b>Time:</b> {row.timestamp_utc}<br>
 <b>FRP:</b> {row.frp}<br>
 <b>Brightness:</b> {row.bright_ti4}<br>
 <b>Note:</b> Possible false positives near landfills or solar facilities
@@ -224,7 +221,7 @@ if df is not None and not df.empty and CEREBRAS_AVAILABLE:
 Satellite anomaly detected:
 Latitude: {row.latitude}
 Longitude: {row.longitude}
-Timestamp (UTC): {row.get('timestamp_utc', 'N/A')}
+Timestamp (UTC): {row.timestamp_utc}
 Thermal Brightness: {row.bright_ti4}
 Radiative Power: {row.frp}
 """
@@ -243,7 +240,21 @@ Always end with a complete final recommendation.
 """
 
     if st.button("⚡ Generate Tactical Action Plan"):
+        # Placeholder for real-time burned acres counter
+        burned_placeholder = st.empty()
         with st.spinner("⚡ Cerebras reasoning in real time…"):
+            start_time = time.time()
+            acres_burned = 0
+            # Simulate GPU/model processing while updating counter
+            while True:
+                elapsed = time.time() - start_time
+                acres_burned = int(elapsed * 2)  # 2 acres per second
+                burned_placeholder.markdown(f"🔥 Acres burned while reasoning: **{acres_burned}**")
+                time.sleep(0.5)
+                if elapsed > 10:  # Replace 10 with actual GPU wait time if known
+                    break
+
+            # Call Cerebras model
             response = client.chat.completions.create(
                 model="llama-3.1-8b",
                 messages=[
@@ -254,6 +265,7 @@ Always end with a complete final recommendation.
                 temperature=0.1
             )
 
+        burned_placeholder.empty()  # Clear counter
         st.success("Tactical plan generated")
         st.markdown("### 📡 Tactical Assessment")
         st.markdown(response.choices[0].message.content)
