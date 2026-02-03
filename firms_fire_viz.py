@@ -90,6 +90,7 @@ satellite = st.sidebar.selectbox(
 # =========================
 firms_api_key = "7a8749d24a541283600ded9b708c220c"
 cerebras_api_key = "csk-y2vf6htw5pp3vhwy63x5j2684yn6r2vwykffke4534tdpfyk"
+mapbox_token = "YOUR_MAPBOX_ACCESS_TOKEN"  # Replace with your Mapbox token
 
 # =========================
 # FIRMS Fetch
@@ -147,8 +148,22 @@ if df is not None and not df.empty:
     center_lat = df["latitude"].mean()
     center_lon = df["longitude"].mean()
 
-    m = folium.Map(location=[center_lat, center_lon], zoom_start=6)
+    # Create map with empty tiles so we can add multiple layers
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=6, tiles=None)
 
+    # Add OpenStreetMap layer
+    folium.TileLayer("OpenStreetMap", name="Street Map").add_to(m)
+
+    # Add Mapbox satellite layer
+    folium.TileLayer(
+        tiles=f"https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/{{z}}/{{x}}/{{y}}?access_token={mapbox_token}",
+        attr="Mapbox",
+        name="Satellite",
+        overlay=False,
+        control=True
+    ).add_to(m)
+
+    # Add markers for each detection
     for idx, row in df.iterrows():
         color = "green" if row.frp < 10 else "orange" if row.frp < 50 else "red"
         radius = min(12, max(4, row.frp / 5))
@@ -173,6 +188,9 @@ if df is not None and not df.empty:
             fill_opacity=0.75,
             popup=popup
         ).add_to(m)
+
+    # Add layer control for switching maps
+    folium.LayerControl().add_to(m)
 
     folium_static(m, width=1200, height=420)
 
