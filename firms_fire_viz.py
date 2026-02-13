@@ -5,6 +5,7 @@ import folium
 from streamlit_folium import folium_static
 from datetime import datetime, timedelta
 from io import StringIO
+import os
 
 # =========================
 # Cerebras
@@ -88,9 +89,9 @@ satellite = st.sidebar.selectbox(
 # =========================
 # API Keys
 # =========================
-firms_api_key = "7a8749d24a541283600ded9b708c220c"
-cerebras_api_key = "csk-y2vf6htw5pp3vhwy63x5j2684yn6r2vwykffke4534tdpfyk"
-mapbox_token = "YOUR_MAPBOX_ACCESS_TOKEN"  # Replace with your Mapbox token
+firms_api_key = st.secrets["FIRMS_API_KEY"]
+cerebras_api_key = st.secrets["CEREBRAS_API_KEY"]
+mapbox_token = st.secrets["MAPBOX_TOKEN"]
 
 # =========================
 # FIRMS Fetch
